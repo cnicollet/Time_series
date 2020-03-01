@@ -1,0 +1,129 @@
+---
+title: "Time_series"
+output: html_document
+---
+
+```{r warning=FALSE, message=FALSE}
+library(fpp2)
+library(ggplot2)
+```
+
+```{r}
+data('melsyd')
+class(melsyd)
+
+autoplot(melsyd[, 'Economy.Class']) +
+  xlab('Year') +
+  ylab('Thousands') +
+  ggtitle('Weekly Economy Classs Passengers: Melbourne=Sydney')
+```
+
+- The data is stored as a time series object. So we can use `autoplot()` function to plot the appropriate plot.
+
+- The plot reveals some interesting patterns:
+  . In the second half of 1989, there was no passengers carried.
+  . A largee increase in passengers load in the second half of 1991.
+  . Every new year is marked by a dip in load, due to holiday effect.
+  . The first half of 1992 is marked by a decrease in loads, dur to a trial took in place were eco class was replaced by business class.
+ 
+```{r}
+autoplot(a10) +
+  xlab('Year') +
+  ylab('$ millions') +
+  ggtitle('Monthly sales of antidiabetic drugs in Australia')
+```
+
+- The time series is caracterised by:
+  . an increasing trend
+  . A strong seasonality which incresase as the level of ts increases.
+  . A drop of sales in each start of the year, due to the change in cost at the end of the calendar year.
+  
+=> It is very important to identify the patterns in the ts in order to choose the best method to capture them properly.
+
+
+```{r}
+ggsubseriesplot(a10) +
+  xlab('Month') +
+  ylab('$ millions') +
+  ggtitle('Seasonal subseies of antidiabetic drugs sales')
+```
+
+
+- Another useful visualization is to plot each variable against each other in case of the presence of many potential predictors.
+```{r message=FALSE, warning=FALSE}
+data('visnights')
+GGally::ggpairs(as.data.frame(visnights[, 1:5]))
+```
+
+The scatterplot matrix can be used to identify relationships between variables and mesure the strength of this latter using correlation. Outliers can also be captured.
+
+```{r}
+beer <- window(ausbeer, start = 1992)
+gglagplot(beer)
+```
+
+- The autocorrelation mesures the linear relationship between the lagged values.
+
+```{r}
+ggAcf(beer)
+```
+
+- lag 4 is higher than other lags, due to seasonal pattern.The peaks tend to be 4 Q apart the troughs tend to be 4 Q apart.
+
+- The blue dashed lines indicate whether the correlations are significantly different from zero (The ts is not a white noise as most of the ACF are outside the blue dashed lines).
+
+## Trend and seasonality in ACF plots
+- In case of a trend, the autocorrelations for small lags tend to be large and positive because observations nearby in ts are also nearby in size. So the ACF will be poisitive and decrease slowly as the lags increase.
+
+- In case of seasonality, the ACF will be larger for seasonal lags then the others.
+
+- In case of a ts with a trend and seasonality, the ACF will combine both patterns explained above.
+
+```{r}
+electri <- window(elec, start = 1980)
+autoplot(electri) +
+  xlab('Year') +
+  ylab('GWh') +
+  ggtitle('Monthly electricity demand 1980 - 1995')
+
+ggAcf(electri, lag.max = 48)
+```
+
+- As the lags increse, the ACF decrease slowly.
+- The scalloped shape is due to the monthly seasonal patterns.
+
+##  Annexe
+```{r}
+autoplot(gold)
+frequency(gold)
+
+autoplot(woolyrnq)
+frequency(woolyrnq)
+
+autoplot(gas)
+frequency(gas)
+
+which.max(gas)
+```
+
+```{r}
+setwd('~/Downloads')
+tute1 <- read.csv('tute1.csv', header = T)
+head(tute1)
+tutets <- ts(tute1[, -1], start = 1981, frequency = 4)
+
+autoplot(tutets, facets = T)
+```
+
+```{r warning=FALSE}
+retaildata <- readxl::read_excel('retail.xlsx', skip = 1)
+
+head(retaildata[1, 1:4])
+retailts <- ts(retaildata[, 'A3349335T'], frequency = 12, start = c(1982, 4))
+
+autoplot(retailts)
+ggseasonplot(retailts)
+ggsubseriesplot(retailts)
+gglagplot(retailts)
+ggAcf(retailts, lag.max = 48)
+```

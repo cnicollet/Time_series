@@ -1,0 +1,414 @@
+---
+title: "Exponential smoothing"
+output: html_document
+---
+
+  Use the ses() function in R to find the optimal values of ?? and ???0, and generate forecasts for the next four months.
+ 
+```{r}
+fit <- ses(pigs, h = 4)
+fit$model
+
+autoplot(fit) + autolayer(fitted(fit), series = 'Fitted') +
+  xlab('Year') +
+  ylab('Monthly Number of pigs slaughtered in Vectoriad')
+```
+
+  95% prediction interval using the formula
+  
+```{r}
+sigma <- 10308.58
+
+(lower <- fit$mean[1] - 1.96 * sigma)
+(upper <- fit$mean[1] + 1.96 * sigma)
+```
+
+  95% prediction interval extracted from the forecast
+
+```{r}
+ 
+fit$lower[1, '95%']
+fit$upper[1, '95%']
+```
+
+  - The results are about the same.
+  
+  Write a function to implement simple exponential smoothing. It should return the forecast of the next observation in the series. Does it give the same forecast as ses()?
+
+```{r}
+simexpsmoo <- function(y, alpha, level){
+  y_hat <- level
+  
+  for(index in 1:length(y)) {
+    y_hat <- alpha * y[index] + (1 - alpha) * y_hat
+  }
+  print(paste('Forecast of the next obs by simexpsmoo func is:', round(y_hat, 2)))
+}
+
+alpha <- fit$model$par[1]
+level <- fit$model$par[2]
+
+simexpsmoo(pigs, alpha, level)
+
+print(paste('Forecast of the next obs from the model is:',round(fit$mean[1], 2)))
+```
+
+  - Both methods give the same result.
+  
+  Modify your function from the previous exercise to return the sum of squared errors rather than the forecast of the next observation. Then use the optim() function to find the optimal values of ?? and ???0. Do you get the same values as the ses() function?
+```{r}
+simexpsmoo <- function(params = c(alpha, level), y){
+  sse <- 0
+  error <- 0
+  alpha <- params[1]
+  level <- params[2]
+  y_hat <- level
+  
+  for(index in 1:length(y)){
+    
+    y_hat <- alpha * y[index] + (1 - alpha) * y_hat
+    
+    error <- y[index] - y_hat
+    sse <- sse + error ^ 2
+   
+    return(sse)
+  }
+}
+
+optim(par = c(.3, pigs[1]), y = pigs, fn = simexpsmoo)$par[1]
+optim(par = c(.8, pigs[1]), y = pigs, fn = simexpsmoo)$par[2]
+
+fit$model$par[1]
+fit$model$par[2]
+```
+
+  books dataset
+
+```{r}
+autoplot(books) +
+  xlab('Days') +
+  ylab('Sales') +
+  ggtitle('Daily sales of paperback and hardcover books at the same store')
+```
+
+  - The plots show an incresing trend for both sales, without any particular seasonal pattern.
+  
+  Use the ses() function to forecast each series, and plot the forecasts
+  
+```{r}
+paperses <- ses(books[, 'Paperback'], h = 4)
+hardcovses <- ses(books[, 'Hardcover'], h = 4)
+
+autoplot(books[, 'Paperback']) +
+  autolayer(paperses) +
+  ylab('total sales') +
+  ggtitle('Paperback total sales')
+
+autoplot(books[, 'Hardcover']) +
+  autolayer(hardcovses) +
+  ylab('total sales') +
+  ggtitle('Hardcover total sales')
+```
+
+  Compute the RMSE values for the training data in each case
+  
+```{r}
+sqrt(mean(residuals(paperses) ^ 2))
+sqrt(mean(residuals(hardcovses) ^ 2))
+```
+
+  Apply Holt???s linear method to the paperback and hardback series and compute four-day forecasts in each case.
+```{r}
+paperholt <- holt(books[, 'Paperback'], h = 4)
+hardcovholt <- holt(books[, 'Hardcover'], h = 4)
+
+autoplot(books[, 'Paperback']) +
+  autolayer(paperholt) +
+  ylab('total sales') +
+  ggtitle('Paperback total sales')
+
+autoplot(books[, 'Hardcover']) +
+  autolayer(hardcovholt) +
+  ylab('total sales') +
+  ggtitle('Hardcover total sales')
+
+```
+
+  RMSE comparison with the previous ones
+
+```{r}
+paperrmse <- sqrt(mean(residuals(paperholt) ^ 2))
+hardcovrmse <- sqrt(mean(residuals(hardcovholt) ^ 2))
+```
+
+  - The values of RSME reulted from Holt's method is lower than the ses method. So the second method is more suitable for this dataset.
+  - In general, ses is suitable for ts that doesn't show any particular trend or seasonal pattern, whereas Holt's linear trend is best for ts with trend.
+  
+  Compare the forecasts for the two series using both methods. Which do you think is best?
+  - Both forecasts from the second method are better comapred to the first method because the RMSE is lower than the first values.
+  - However, Holt's method is more suitable for hardcover ts because it captures the pattern.
+  
+  Calculate a 95% prediction interval for the first forecast for each series, using the RMSE values and assuming normal errors. Compare your intervals with those produced using ses and holt.
+  
+```{r}
+paperholt$lower[1, '95%']
+paperholt$upper[1, '95%']
+
+paperholt$mean[1] - 1.96 * paperrmse
+paperholt$mean[1] + 1.96 * paperrmse
+
+
+hardcovholt$lower[1, '95%']
+hardcovholt$upper[1, '95%']
+
+hardcovholt$mean[1] - 1.96 * hardcovrmse
+hardcovholt$mean[1] + 1.96 * hardcovrmse
+```
+
+```{r}
+eggs_holts <- holt(eggs, h = 100)
+
+autoplot(eggs) +
+  autolayer(eggs_holts, series = "Holt's method", PI = F) 
+```
+
+```{r}
+eggs_holts_damped <- holt(eggs, damped = T, h = 100)
+
+autoplot(eggs) +
+  autolayer(eggs_holts_damped, series = "Holt's method", PI = F) 
+```
+  
+  
+```{r}
+eggs_holts_transformed <- holt(eggs, lambda = BoxCox.lambda(eggs), h = 100)
+
+autoplot(eggs) +
+  autolayer(eggs_holts_transformed, series = "Holt's method", PI = F) 
+```
+  
+  - The first method is not suitable for this ts as it gives negatives values for eggs price.
+  - The second plot doesn't give negative values, but it doesn't reflect the real decreasing trend.
+  - The third plot is better because it gives positives values and it follows the decreasing trend.
+  
+```{r}
+sqrt(mean(residuals(eggs_holts) ^ 2))
+sqrt(mean(residuals(eggs_holts_damped) ^ 2))
+sqrt(mean(residuals(eggs_holts_transformed) ^ 2))
+```
+  
+  - The model with BoxCox transformation gives the lowest RMSE.
+  
+  retail dataset
+
+```{r}
+retail <- readxl::read_excel('retail.xlsx', skip = 1)
+retail_ts <- ts(retail[, 'A3349335T'], frequency = 12, start = c(1982, 4))
+autoplot(retail_ts[, 'A3349335T'])
+```
+
+  - The plot shows an increasing trend and a strong seasonality which increases along the ts. So the multiplicative method will be more appropriate than additive method.
+  
+```{r}
+retail_hw <- hw(retail_ts, seasonal = 'multiplicative')
+retail_hw_damped <- hw(retail_ts, damped = T, seasonal = 'multiplicative')
+
+
+autoplot(retail_ts) +
+  autolayer(retail_hw, series = 'HW multiplicative forecasts', PI = F) +
+  autolayer(retail_hw_damped, series = 'HW damped multiplicative forecasts', PI = F) +
+  xlab('Year') +
+  guides(col = guide_legend(title = 'Forecast'))
+```
+
+The damped version of the forecasts increase slowly.
+
+  Compute RMSE for both methods
+
+```{r}
+sqrt(mean(residuals(retail_hw) ^ 2))
+sqrt(mean(residuals(retail_hw_damped) ^ 2 ))
+
+err1 <- tsCV(retail_ts, hw, h = 1, seasonal = 'multiplicative')
+err2 <- tsCV(retail_ts, hw, h = 1, seasonal = 'multiplicative', damped = T)
+
+sqrt(mean(err1 ^ 2, na.rm = T))
+sqrt(mean(err2 ^ 2, na.rm = T))
+```
+
+  - The rmse are about the same.
+
+  Check the residuals
+
+```{r}
+checkresiduals(retail_hw_damped)
+```
+
+The ACF plot shows that residuals are autocorrrelated. So the residuals are not white noise and this confirmed by the Ljung-Box test with a very small p-value.
+
+  Find the test set RMSE, while training the model to the end of 2010. Can you beat the seasonal na??ve approach from Exercise 8 in Section 3.7?
+  
+```{r}
+retail_tain <- window(retail_ts, end = c(2010, 12))
+retail_test <- window(retail_ts, start = 2011)
+
+retail_fit <- hw(retail_tain, h = 36, seasonal = 'multiplicative')
+accuracy(retail_fit, retail_test)
+accuracy(snaive(retail_tain), retail_test)
+```
+
+  - The multiplicative method gives better results than the seasonal naive method.
+  
+  For the same retail data, try an STL decomposition applied to the Box-Cox transformed series, followed by ETS on the seasonally adjusted data. How does that compare with your best previous forecasts on the test set?
+  
+```{r}
+retail_fc <- stlm(retail_tain, 
+                  robust = T, 
+                  method = 'ets', 
+                  lambda = BoxCox.lambda(retail_tain)) %>% 
+  forecast(h = 36, 
+           lambda = BoxCox.lambda(retail_tain))
+
+autoplot(retail_fc)
+
+accuracy(retail_fc, retail_test)
+```
+
+  - The multiplicative method still gives better results than the one used above.
+  
+  For this exercise use data set ukcars, the quarterly UK passenger vehicle production data from 1977Q1???2005Q1.
+
+  Plot the data and describe the main features of the series.
+
+```{r}
+autoplot(ukcars) +
+  xlab('Year') +
+  ylab('UK passenger vehicule production')
+```
+
+    - The plot shows a decresing trend until ~ 1982 and an increasing trend. It presents also a seasonal pattern.
+    
+  Decompose the series using STL and obtain the seasonally adjusted data.
+  
+```{r}
+seaAdj <- stl(ukcars, s.window = 'periodic')
+autoplot(seaAdj)
+```
+  
+  Forecast the next two years of the series using an additive damped trend method applied to the seasonally adjusted data. (This can be done in one step using stlf() with arguments etsmodel="AAN", damped=TRUE.)
+  
+```{r}
+autoplot(stlf(ukcars, h = 8, etsmodel = 'AAN', damped = T))
+```
+
+  Forecast the next two years of the series using Holt???s linear method applied to the seasonally adjusted data (as before but with damped=FALSE).
+
+```{r}
+autoplot(stlf(ukcars, h = 8, etsmodel = 'AAN', damped = F))
+```
+
+  Now use ets() to choose a seasonal model for the data.
+  
+```{r}
+autoplot(forecast(ets(ukcars), h = 8))
+```
+
+  Compare the RMSE of the ETS model with the RMSE of the models you obtained using STL decompositions. Which gives the better in-sample fits?
+  
+```{r}
+accuracy(stlf(ukcars, h = 8, etsmodel = 'AAN', damped = T))
+accuracy(stlf(ukcars, h = 8, etsmodel = 'AAN', damped = F))
+accuracy(forecast(ets(ukcars), h = 8))
+```
+
+  -  The second method gives the best results.
+  
+  Compare the forecasts from the three approaches? Which seems most reasonable?
+  
+  - The second approach which is forecasts from STL and EST(A, A, N) is the most suitable one for this ts.
+
+  Check the residuals of your preferred model.
+
+```{r}
+checkresiduals(stlf(ukcars, h = 8, etsmodel = 'AAN', damped = F))
+```
+
+  - The ACF plot shows that the residuals are autocorrelated and they look left skewed (histogram) and don't follow a white noise pattern (Ljung-Box test).
+  
+  
+  For this exercise use data set visitors, the monthly Australian short-term overseas visitors data, May 1985???April 2005.
+  
+  Make a time plot of your data and describe the main features of the series.
+  
+```{r}
+autoplot(visitors) +
+  xlab('Year') +
+  ylab('Visitors') +
+  ggtitle('Monthly Australian short-term overseas visitors data, May 1985???April 2005')
+```
+  
+  - There is an increasing trend over time and a strong seasonal pattern that increases over time.
+  
+  Split your data into a training set and a test set comprising the last two years of available data. Forecast the test set using Holt-Winters??? multiplicative method.
+Why is multiplicative seasonality necessary here?
+  
+```{r}
+visitorstrain <- subset(visitors, end = length(visitors) - 24)
+visitorstest <- subset(visitors, start = length(visitorstrain) + 1)
+
+visitorsfc <- hw(visitorstrain, method = 'multiplicative', h = 24)
+autoplot(visitorsfc)
+```
+  
+  - when the seasonal variations are changing proportional to the level of the series, the multiplicative method is preferred.
+  
+  Forecast the two-year test set using each of the following methods:
+an ETS model; an additive ETS model applied to a Box-Cox transformed series; a seasonal na??ve method; an STL decomposition applied to the Box-Cox transformed data followed by an ETS model applied to the seasonally adjusted (transformed) data.
+
+```{r}
+visitets_fc <- forecast(ets(visitorstrain), h = 24)
+autoplot(visitets_fc)
+
+visitets_addtrans_fc <- forecast(ets(visitorstrain, lambda = BoxCox.lambda(visitorstrain), additive.only = T), h = 24)
+autoplot(visitets_fc)
+
+visitsnaive <- snaive(visitorstrain, h = 24)
+autoplot(visitsnaive)
+
+visit_stlets_transfc <- stlm(visitorstrain, lambda = BoxCox.lambda(visitorstrain), method = 'ets') %>%
+  forecast(h = 24)
+autoplot(visit_stlets_transfc)
+```
+
+  Which method gives the best forecasts? Does it pass the residual tests?
+  
+```{r}
+accuracy(visitets_fc, visitorstest)
+accuracy(visitets_addtrans_fc, visitorstest)
+accuracy(visitsnaive, visitorstest)
+accuracy(visit_stlets_transfc, visitorstest)
+```
+
+- The best results are given by the seasonal na??ve method, followed by the STL + ETS(M, Q, N) with box-cox transformation.
+
+  Compare the same four methods using time series cross-validation with the tsCV() function instead of using a training and test set. Do you come to the same conclusions?
+  
+```{r}
+fets <- function(ts, h) {
+  forecast(ets(ts), h = h)
+}
+
+fetsadd <- function(ts, y){
+  forecast(ets(ts, lambda = BoxCox.lambda(ts), additive.only = T), h = h)
+}
+
+flstm <- function(ts, h) {
+  stlm(ts, lambda = BoxCox.lambda(ts), method = 'ets') %>%
+  forecast(h = h)
+}
+
+sqrt(mean(tsCV(visitors, fets, h = 1) ^ 2), na.rm = T)
+sqrt(mean(tsCV(visitors, snaive, h = 1) ^ 2), na.rm = T)
+sqrt(mean(tsCV(visitors, fetsadd, h = 1) ^ 2), na.rm = T)
+sqrt(mean(tsCV(visitors, flstm, h = 1) ^ 2), na.rm = T)
+```

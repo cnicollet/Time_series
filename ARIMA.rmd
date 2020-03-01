@@ -1,0 +1,540 @@
+---
+title: "ARIMA"
+output: html_document
+---
+
+  - Exponential smoothing and ARIMA models are the two most widely used approaches in time series forecasting. ARIMA models aim to describe the autocorrelations in the data.
+
+  - A white noise is stationary, because the observations do not depend on time.
+  
+  - A ts with cyclic pattern is stationary if it doesn't have seasonal or trend pattern. Because the cycles are not of fixed length.
+  
+  - Transformation such as BoxCox help stabilising the variance of a ts.
+  
+  - Differencing(difference between 2 consecutives observations) help stabilising the mean of a ts, by removing the changes in the level of a ts. Hence it eliminates seasonality and trend. 
+  
+  * Another useful way to check for stationarity is to use the ACF plot. If it drops relatively quickly, then we can assume that ts is stationary.
+  
+  * If the ACF shows no autocorrelations outside the 95%, then we can be sure that it is stationary. This can be confirmed by the Ljung-Box test with p > .05.
+  
+  Autoregressive model (AR)p: a linear combination of the variable of interest against itself is used during forecasting.
+  
+  Moving Average Model (MA)q: uses past forecast errors in a regression
+  
+
+  Modelling a non seasonal time series using a non seasonal ARIMA model
+```{r warning=FALSE, message=FALSE}
+library(fpp2)
+library(forecast)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+autoplot(elecequip)
+
+elecadj <- stl(elecequip, s.window = 'periodic') %>%
+  seasadj()
+
+autoplot(elecadj)
+```
+
+  - The plot shows incresaing and decresasing trend, with a very big decrease around 2008.
+  - No change in the variance, no need to do a BoxCox transformation.
+  - Need of differencing as the ts is not stationary.
+  
+```{r}
+elecadj %>%
+  diff() %>%
+  ggtsdisplay()
+```
+
+  - d = 1 of differencing is required to make the ts stationnary.
+  - The ACF shows decreasing lags and the PACF shows a spike at lag 3, suggesting a ARIMA(3, 1, 0)
+
+```{r}
+(elcfit <- Arima(elecadj, order = c(3, 1, 0)))
+(elcfit1 <- Arima(elecadj, order = c(3, 1, 1)))
+(elcfit2 <- Arima(elecadj, order = c(3, 1, 2)))
+(elcfit <- Arima(elecadj, order = c(2, 1, 1)))
+```
+
+  - ARIMA(3, 1, 1) gives the best result with AICc=995.7.
+  
+```{r}
+checkresiduals(elcfit1)
+```
+
+  - The time plot shows that data are centered around zero and no changing variance.
+  - The histogram shows data normally distributed and centered around zero.
+  - The ACF plot shows no autocorrelation of the residuals.
+  - The Ljung Box test shows that the residuals behave like white noise.
+  
+```{r}
+autoplot(forecast(elcfit1))
+```
+
+  Modelling a seasonal ts using a seasonal ARIMA
+  
+```{r}
+autoplot(euretail)
+
+decompose(euretail, type = 'multiplicative') %>% autoplot()
+```
+
+  - The ts shows some seasonality and an increasing trend. 
+  
+```{r}
+euretail %>%
+  diff(lag = 4) %>%
+  ggtsdisplay()
+```
+
+  - The data seem non stationary as the ACF decrease slowly and the time plot shows some patterns.
+
+```{r}
+euretail %>%
+  diff(lag = 4) %>%
+  diff() %>%
+  ggtsdisplay()
+```
+
+  - The PACF shows a spike at lag 4, indicating a seasonal AR(1), and a spike at lag 1 suggests a non seasonal AR(1). ARIMA(1,1,0)(1,1,0)4.
+
+```{r}
+euretail %>%
+  Arima(order = c(1, 1, 0), seasonal = c(1, 1, 0)) %>%
+  checkresiduals()
+```
+
+```{r}
+f1 <- euretail %>%
+  Arima(order = c(1, 1, 0), seasonal = c(1, 1, 0))
+
+f2 <- euretail %>%
+  Arima(order = c(0, 1, 1), seasonal = c(0, 1, 1))
+
+f3 <- euretail %>%
+  Arima(order = c(0, 1, 3), seasonal = c(0, 1, 1))
+```
+
+  ==> The best model is ARIMAc(0, 1, 3)(0, 1, 1)4
+  
+  * Forecast for the next 3 years
+  
+```{r}
+f3 %>%
+  forecast(h = 12) %>%
+  autoplot()
+```
+  
+  - The point forecasts follow the decreasing trend, while the increasing prediction intervals allows for increasing trend in the future.
+  
+```{r}
+window(ausair, start=1990) %>%
+  autoplot()
+
+ts1 <- ts(rnorm(36), start = 1900)
+ts2 <- ts(rnorm(360), start = 1900)
+ts3 <- ts(rnorm(1000), start = 1900)
+
+ggtsdisplay(ts1)
+ggtsdisplay(ts2)
+ggtsdisplay(ts3)
+```
+
+  - As the ts are randomly generated, they should be stationary, meaning that they don't depend on time.
+  
+  - The critical values becomes narrower as we increase the size of the ts, because a much larger ts is less variable, so the standards deviation around the points is low. 
+  
+  - The autocorrelations are different in each figure, because they don't have the exact values in each ts, which will be used to compute the lags.
+  
+  `ibmclose` dataset
+
+```{r}
+ggtsdisplay(ibmclose) 
+```
+
+  - The time plot shows an increasing and decreasing trend.
+  - Increasing variance over time is also noticed. So a Box-Cox transformation can help stabilising the variance.
+  - The ACF shows that the autocorrelations are decreasing very slowly, indicating that the ts is ot stationary.
+  
+```{r}
+autoplot(usnetelec)
+
+diff(usnetelec) %>%
+  ggtsdisplay()
+
+autoplot(usgdp)
+diff(diff(usgdp)) %>%
+  ggtsdisplay()
+
+autoplot(mcopper)
+diff(log(mcopper)) %>%
+  ggtsdisplay()
+
+autoplot(enplanements)
+diff(diff(log(enplanements), lag = 12)) %>%
+  ggtsdisplay()
+
+autoplot(visitors)
+diff(diff(log(visitors), lag = 12)) %>%
+  ggtsdisplay()
+```
+
+  `retail` dataset
+
+```{r}
+retail <- readxl::read_excel('retail.xlsx', skip = 1)
+
+retailts <- ts(retail[, 'A3349335T'], start = c(1982, 4))
+
+
+diff(diff(log(retailts), lag = 12)) %>%
+  ggtsdisplay()
+```
+
+
+```{r}
+y <- ts(numeric(100))
+e <- rnorm(100)
+for(i in 2:100)
+  y[i] <- 0.6 * y[i-1] + e[i]
+
+autoplot(y)
+```
+
+changing phi
+
+```{r}
+y <- ts(numeric(100))
+e <- rnorm(100)
+for(i in 2:100)
+  y[i] <- 0 * y[i-1] + e[i]
+
+autoplot(y)
+```
+
+  - When phi = 0, the ts becomes stationary.
+  - When phi < 0, the ts oscillates arround the mean.
+  - When phi = 1, the ts becomes random walk.
+  
+  `wmurders` dataset
+  
+```{r}
+autoplot(wmurders) +
+  xlab('Year') +
+  ylab('Number of women murdered (per 100,000 standard population)') +
+  ggtitle('number of women murdered each year (per 100,000 standard population) in the United States')
+```
+
+  ==> The time plot shows an increasing and a decreasing trend, without any seasonal patterns.
+  
+```{r}
+diff(diff(wmurders)) %>%
+  ggtsdisplay()
+
+wmfit <- Arima(wmurders, order = c(1, 2, 1))
+checkresiduals(wmfit)
+auto.arima(wmurders)
+```
+
+  ==> ARIMA(1,2,1) gives the best result.
+  ==> The time plot shows residuals around mean 0, with a small variation, indicating that the prediction intervals may be innacurate.
+  ==> The histogram shows a tiny right skewed data, this affects the PI.
+  ==> The ACF plot shows no autocorrelation of the residuals, this is confirmed by the Ljung-box test with p-values > .05.
+  
+  * Forecast three years ahead
+
+```{r}
+wmfc <- forecast(wmfit, h = 3)
+autoplot(wmfc)
+```
+
+  `austa` dataset
+  
+```{r}
+austafit <- auto.arima(austa)
+checkresiduals(austafit)
+
+autoplot(forecast(austafit, h = 10))
+```
+
+  ==> ARIMA(0, 1, 1) model is chosen.
+  ==> The residuals seem to be white noise with mean 0.
+  
+```{r}
+autoplot(forecast(Arima(austa, order = c(0, 1, 0)), h = 10))
+```
+  
+  * Plot forecasts from an ARIMA(0,1,1) model with no drift and compare these to part a. Remove the MA term and plot again.
+
+```{r}
+autoplot(forecast(Arima(austa, order = c(0, 1, 1), include.drift = F), h = 10))
+autoplot(forecast(Arima(austa, order = c(0, 1, 0), include.drift = F), h = 10))
+```
+
+  * Plot forecasts from an ARIMA(2,1,3) model with drift. Remove the constant and see what happens.
+  
+```{r}
+autoplot(forecast(Arima(austa, order = c(2, 1, 3), include.drift = T), h = 10))
+autoplot(forecast(Arima(austa, order = c(0, 1, 0), include.mean = F), h = 10))
+```
+  
+  * Plot forecasts from an ARIMA(0,0,1) model with a constant. Remove the MA term and plot again.
+
+```{r}
+autoplot(forecast(Arima(austa, order = c(0, 0, 1), include.constant = T), h = 10))
+autoplot(forecast(Arima(austa, order = c(0, 0, 0), include.constant = T), h = 10))
+```
+
+  * Plot forecasts from an ARIMA(0,2,1) model with no constant.
+
+```{r}
+autoplot(forecast(Arima(austa, order = c(0, 2, 1), include.constant = F), h = 10))
+(usgdpfit <- auto.arima(log(usgdp)))
+```
+
+  `usgdp` dataset
+  
+```{r}
+autoplot(usgdp)
+
+(usgdpfit <- auto.arima(log(usgdp), stepwise=FALSE))
+
+(usgdpfit1 <- auto.arima(log(usgdp)))
+```
+  
+  ==> ARIMA(2,1,2) with drift  is the best model selected.
+  
+```{r}
+checkresiduals(usgdpfit1)
+```
+
+  ==> The residuals look white noise.
+
+  * Produce forecasts of your fitted model. Do the forecasts look reasonable?
+
+```{r}
+autoplot(forecast(usgdpfit1))
+```
+
+  * Compare the results with what you would obtain using ets() (with no transformation).
+  
+```{r}
+autoplot(forecast(ets(usgdp)))
+```
+
+  ==> The forecasts from the auto.arima model go straight, whereas those fron ets method goes like quadratic.
+  
+  `austourists` dataset
+
+```{r}
+ggtsdisplay(austourists)
+```
+
+  ==> The ACF plot suggests that ts has a strong quarterly seasonality.
+
+```{r}
+diff(austourists, lag = 4) %>%
+  ggtsdisplay()
+```
+
+  ARIMA(1,0,0)(1,1,0)4
+
+  * Does auto.arima() give the same model that you chose? If not, which model do you think is better?
+  
+```{r}
+auto.arima(austourists)
+```
+
+  `usmelec` dataset
+  
+  * Consider usmelec, the total net generation of electricity (in billion kilowatt hours) by the U.S. electric industry (monthly for the period January 1973 ??? June 2013). In general there are two peaks per year: in mid-summer and mid-winter.
+
+  * Examine the 12-month moving average of this series to see what kind of trend is involved.
+  Do the data need transforming? If so, find a suitable transformation.
+
+```{r}
+usmelecMA12 <- ma(usmelec, order = 12)
+
+autoplot(usmelec, series = 'Data') +
+  autolayer(usmelecMA12, series = '2x12MA') +
+  xlab('Year') +
+  ylab('Total electricity (billion kilowatt hrs)')
+  ggtitle('Monthly total net generation of electricity')
+```
+
+  ==> Electricity generation is increasing over time until 2008. The ts needs a log transformation as the variation is increasing over time.
+
+```{r}
+p1 <- autoplot(usmelec)
+p2 <- autoplot(log(usmelec))
+p3 <- autoplot(BoxCox(usmelec, BoxCox.lambda(usmelec)))
+gridExtra::grid.arrange(p1, p2, p3)
+```
+
+  * Are the data stationary? If not, find an appropriate differencing which yields stationary data.
+
+  ==> The ts is not stationary as the trend is increasing. We need to do a first differencing and see if it became stationary.
+
+```{r}
+log(usmelec) %>%
+  ndiffs()
+
+# ==> ndiff() returns 1 because one seasonal differencing is required.
+
+log(usmelec) %>%
+  diff(lag=12) %>%
+  ndiffs()
+
+# ==> Applying ndiffs() to the seasonally differenced ts suggests that we should do both deasonal and a first diffrenece.
+```
+
+  * Identify a couple of ARIMA models that might be useful in describing the time series. Which of your models is the best according to their AIC values?
+
+```{r}
+fit <- auto.arima(log(usmelec), stepwise = F)
+
+fit1 <- Arima(log(usmelec), order = c(0,1,2), seasonal = c(0,1,1))
+fit1
+fit
+```
+
+  * Estimate the parameters of your best model and do diagnostic testing on the residuals. Do the residuals resemble white noise? If not, try to find another ARIMA model which fits better.
+
+```{r}
+summary(fit)$coef
+checkresiduals(fit3)
+
+fit3 <- auto.arima(usmelec, lambda = BoxCox.lambda(usmelec), stepwise = F)
+fit3
+```
+  
+  * Forecast the next 15 years of electricity generation by the U.S. electric industry. Get the latest figures from the EIA to check the accuracy of your forecasts.
+
+```{r}
+fc <- autoplot(forecast(fit3, h = 12 * 15))
+```
+ 
+```{r message=FALSE, warning=FALSE}
+setwd('../../../Downloads/')
+
+mer <- read.csv('MER_T07_02A.csv', sep = ',')
+
+mer <- mer %>%
+  mutate(Year = substr(YYYYMM, 1, 4),
+         Month = substr(YYYYMM, 5, 6),
+         Value = as.numeric(as.character(Value)) / 1000) %>% #Convert millions to billions
+  filter(Month != 13) %>%
+  select(Year, Month, Value)
+
+merts <- ts(mer[, 'Value'], start = c(1973, 1), end = c(2019, 11), frequency = 12)
+``` 
+  * Eventually, the prediction intervals are so wide that the forecasts are not particularly useful. How many years of forecasts do you think are sufficiently accurate to be usable?
+  
+  ==> 4 years of forecasts follow the predicted data, after that the prediction intervals become wider with time.
+  
+  * `mcopper` dataset
+  
+  * Find a suitable Box-Cox transformation for the data; fit a suitable ARIMA model to the transformed data using auto.arima().
+
+```{r}
+p1 <- autoplot(mcopper) +
+  xlab('Year') 
+
+p2 <- autoplot(log(mcopper)) +
+  xlab('Year') 
+
+gridExtra::grid.arrange(p1, p2)
+
+fit1 <- auto.arima(log(mcopper))
+```
+
+  ==> It looks like the ts presents an increasing trend and some variations over time.
+
+  * Try some other plausible models by experimenting with the orders chosen; choose what you think is the best model and check the residual diagnostics;
+```{r}
+ndiffs(mcopper)
+
+fit2 <- Arima(log(mcopper), order = c(1, 1, 2))
+checkresiduals(fit2)
+```
+
+  ==> The residuals seem to be centered aroud 0 and normally distributed. The ACF shows no autocorrelation. This is confirmed by Ljung-Box test which confirms that residuals behave like white noise.
+  
+  * Produce forecasts of your fitted model. Do the forecasts look reasonable?
+  Compare the results with what you would obtain using ets() (with no transformation).
+
+```{r}
+autoplot(forecast(fit1), series = 'fit1') + 
+  autolayer(forecast(fit2), series = 'fit2')
+```
+
+```{r}
+autoplot(forecast(ets(mcopper)))
+```
+  
+  ==> The forecast obtained using ets() is more reasonable but with a much wider prediction interval.
+  
+  * Choose one of the following seasonal time series: hsales, auscafe, qauselec, qcement, qgas.
+  * Do the data need transforming? If so, find a suitable transformation.
+
+```{r}
+autoplot(log(auscafe))
+```
+
+  ==> As the variation increases with time, log transformation is needed to stabilise it.
+ 
+  * Are the data stationary? If not, find an appropriate differencing which yields stationary data.
+  * Identify a couple of ARIMA models that might be useful in describing the time series. Which of your models is the best according to their AIC values? 
+```{r}
+ndiffs(diff(auscafe, lag = 12))
+
+fit <- auto.arima(log(auscafe))
+```
+
+  ==> The ts shows an increasing trend and seasonal pattern. So it needs differencing.
+  ==> A seasonal differencig and another extra diff should be applied.
+ 
+  * Estimate the parameters of your best model and do diagnostic testing on the residuals. 
+  * Do the residuals resemble white noise? If not, try to find another ARIMA model which fits better.
+```{r}
+coefficients(fit)
+
+checkresiduals(fit)
+fit == ARIMA(2,1,1)(2,1,2)[12]  == -1902.63
+-1895.38 ==ARIMA(1,1,1)(0,1,2)[12] 
+-1896.1==ARIMA(2,1,1)(2,1,2)[12] 
+-1902.79 == ARIMA(2,1,1)(1,1,3)[12]
+-1924.15 == ARIMA(2,1,1)(2,1,3)[12]
+
+fit1 <- Arima(log(auscafe), order = c(2, 1, 1), seasonal = c(2, 1, 3))
+
+checkresiduals(fit)
+```
+
+  ==> The residuals of the model `fit` chosen automatically do not seem as white noise.
+  ==> The best one `fit1` with lower AICc seem to have residuals behaving like white noise.
+  
+  * Forecast the next 24 months of data using your preferred model.
+
+```{r}
+p1 <- autoplot(forecast(fit), h = 12 * 2) 
+
+p2 <- autoplot(forecast(ets(auscafe)), h = 12 * 2)
+
+p3 <- autoplot(forecast(fit1), h = 12 * 2)
+
+gridExtra::grid.arrange(p1, p2, p3)
+```
+
+  * For the same time series you used in the previous exercise, try using a non-seasonal model applied to the seasonally adjusted data obtained from STL. The stlf() function will make the calculations easy (with method="arima"). Compare the forecasts with those obtained in the previous exercise. Which do you think is the best approach?
+
+```{r}
+fit_stlf <- stlf(log(auscafe), s.window = 'periodic', robust = T, method = 'arima', h = 24)
+autoplot(forecast(fit_stlf))
+```
+
+  ==> The ets() model yield to wider prediction interrvals.
+  ==> The stlf() method yield to higher forecasts and seem to fllow the past pattern.

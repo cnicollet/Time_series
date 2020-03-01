@@ -1,0 +1,294 @@
+---
+title: "The_forecast_toolbox"
+output: html_document
+---
+
+## TRANSFORMATIONS AND ADJUSTEMENTS
+of hisyorical data is very useful in removing known source of variations (calendar adj, pop adj, inflation adj, mathematical transf) and sumplifying the pattern of historiacel data, leading to more accurate forecasts.
+  
+  1 - Calendar adjustment: eg - some variations come from the different number of days present in each month
+```{r}
+milkdata <- cbind(Monthly = milk, 
+                  DailyAvg = milk / monthdays(milk))
+
+autoplot(milkdata, facet = T) + 
+  xlab('Years') +
+  ylab('Pounds') +
+  ggtitle('Milk production per cow')
+```
+
+- The avg daily procduction plot give a simpler model compared to the original one, because the variation caused by the diffrence in month lengths is removed.
+
+  2 - Population adjustments
+  If data are affected by pop changes, we should consider to use per capita data.
+  
+- Both average and drift methods implies using all available observations even future obsevations after t to compute the parameter estimates. So they are not considered as true forecasts, but `naive and seasonal naive do not imply any parameters, so fitted values are true forecasts`.
+
+## Residuals: is what is left over after fitting a model. it helps checking if the model has adequately captured the information in the data.
+
+  1 - residuals should not be correlated, otherwise there still some info that should be used in the forecasting process.
+  2 - residuals have mean 0, otherwise the forecasts are biased.
+  
+To solve the bias problem, we simply add the ?? residuals mean to each forecast.
+
+  - In order to make the prediction intervals easier, we can check for these following properties:
+  1 - The residuals have constant variance.
+  2 - The residuals are normally distributed.
+
+- In order to improve the forescating method, we should focus on the 2 first conditions.
+
+- Sometimes, the box-cox tranformation can be used to satisfy the second conditions part.
+
+`The best method to forecast stock prices and indexes is to use naive method`. Each forecast is equal to the last obs. So the residuals = the difference between consecutive obs.
+  
+```{r warning=FALSE}
+data('goog200')
+head(goog200)
+library(forecast)
+checkresiduals(naive(goog200))
+```
+The mean of the residuals is close to zero and there is no significant correlation in the residuals series. 
+naive method produces forecasts that appear to account for all available information. 
+
+The time plot of the residuals shows that the variation of the residuals stays much the same across the historical data, apart from the one outlier, and therefore the residual variance can be treated as constant. The histogram suggests that the residuals may not be normal ??? the right tail seems a little too long. Consequently, forecasts from this method will probably be quite good, but prediction intervals that are computed assuming a normal distribution may be inaccurate.
+
+- A Ljung-Box test is useful to check if the residuals are white noise. If p-value is bigger tha .05, then we can conclude that they are white noise.
+
+  * For the following series, find an appropriate Box-Cox transformation in order to stabilise the variance.
+```{r}
+library(fpp2)
+autoplot(BoxCox(usnetelec, lambda = BoxCox.lambda(usnetelec)))
+
+autoplot(BoxCox(usgdp, lambda = BoxCox.lambda(usgdp)))
+
+autoplot(BoxCox(mcopper, lambda = BoxCox.lambda(mcopper)))
+
+autoplot(BoxCox(enplanements, lambda = BoxCox.lambda(enplanements)))
+autoplot(BoxCox(cangas, lambda = BoxCox.lambda(cangas)))
+
+autoplot(BoxCox(dole, lambda = BoxCox.lambda(dole)))
+
+autoplot(BoxCox(usdeaths, lambda = BoxCox.lambda(usdeaths)))
+autoplot(BoxCox(bricksq, lambda = BoxCox.lambda(bricksq)))
+```
+
+  * Why is a Box-Cox transformation unhelpful for the cangas data?
+
+```{r}
+autoplot(cangas)
+
+hist(BoxCox(cangas, lambda = BoxCox.lambda(cangas)))
+hist(cangas)
+```
+
+  ==> Box-Cox transformation may help to make data look normal. But in this case, the transformed data is not normally distributed, thus this method is useless for this case.
+  
+  * `retail dataset`
+  What Box-Cox transformation would you select for your retail data?
+
+```{r}
+setwd('../../../Downloads/')
+retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+
+retailts <- ts(retaildata[, 'A3349335T'], frequency=12, start=c(1982,4))
+autoplot(BoxCox(retailts, lambda = BoxCox.lambda(retailts)))
+```
+
+  * For each of the following series, make a graph of the data. If transforming seems appropriate, do so and describe the effect. dole, usdeaths, bricksq
+  
+```{r}
+autoplot(dole)
+autoplot(BoxCox(dole, lambda = BoxCox.lambda(dole)))
+
+autoplot(usdeaths)
+autoplot(BoxCox(usdeaths, lambda = BoxCox.lambda(usdeaths)))
+
+autoplot(bricksq)
+autoplot(BoxCox(bricksq, lambda = BoxCox.lambda(bricksq)))
+```
+  
+  ==> It seems that applying an Box-Cox trasformation for `dole` ts gives better results as it stabilises the variations over time, but it is useless for `usdeaths and briksq` ts.
+  
+  * Calculate the residuals from a seasonal na??ve forecast applied to the quarterly Australian beer production data from 1992. Test if the residuals are white noise and normally distributed.
+
+```{r}
+beer <- window(ausbeer, start = 1992)
+beermod <- snaive(ausbeer)
+autoplot(beermod)
+autoplot(residuals(beermod))
+checkresiduals(beermod)
+```
+
+  ==> The residuals are not white noise and not normally distributed. So The prediction intervals will not be accurate.
+  
+```{r}
+autoplot(WWWusage)
+checkresiduals(naive(WWWusage))
+```
+
+  ==> As the ts doesn't present any seasonal pattern, we will shoose a naive method.
+  ==> The residuals are autocorrelated and are not white noise, meaning that we still have some info that are not captured by the model. So we can use differencing as the ts presents increasing and decreasing trend and use more sophisticated model.
+  
+```{r}
+autoplot(bricksq)
+checkresiduals(snaive(bricksq))
+```
+
+  ==> As the ts presents seasonal patterns, we will shoose snaive method.
+  ==> The residuals are autocorrelated and are not white noise, meaning that we still have some info that are not captured by the model. So we can use differencing as the ts presents increasing and decreasing trend and seasonal patterns, and use more sophisticated model.
+  
+  7 - a: Good forecast methods should not necessary have normally distributed residuals. But it is necessary to have accurate prediction intervals.
+  
+  7 - b: A model with small residuals will give good forecasts. Comaparing residuals is important to select the best modelm but a good forecast depend on the validation of the assumptions regarding the residuals, having zero mean and no autocorrelation.
+  
+  7 - c: The best measure of forecast accuracy is different in different situations.
+  
+  7 - d: If model doesn't forecast well, we should try other transformations, but more complicated forecast method doesn't allways lead to better results.
+  
+  7 - e: Always choose the model with the best forecast accuracy as measured on the test set, after checking the assumptions regarding the residuals.
+  
+  8  - Retail data
+  
+```{r message=FALSE, warning=FALSE}
+setwd('../../../Downloads')
+retaildata <- readxl::read_excel('retail.xlsx', skip = 1)
+
+head(retaildata[1, 1:4])
+retails <- ts(retaildata[, 'A3349335T'], frequency = 12, start = c(1982, 4))
+```
+
+  * Data split
+  
+```{r}
+retailstrain <- window(retails, end = c(2010, 12))
+retailstest <- window(retails, start = 2011)
+
+autoplot(retails) +
+  autolayer(retailstrain, series = 'Train') +
+  autolayer(retailstest, series = 'Test')
+```
+
+  * Compute the forecasts using snaive
+  
+```{r}
+retailsmodel <- snaive(retailstrain)
+
+accuracy(retailsmodel, retailstest)
+```
+
+  * Check residuals
+  
+```{r}
+checkresiduals(retailsmodel)
+```
+
+  ==> The residuals don't have mean zero and are highly correlated, meaning the lots of info are not captured by the model, we should improve it.
+  ==> The residuals are not normally distributed either and don't follow a white noise.
+  
+  9  - visnights data set
+```{r}
+train1 <- window(visnights[, 'QLDMetro'], end = c(2013, 4))
+train2 <- window(visnights[, 'QLDMetro'], end = c(2014, 4))
+train3 <- window(visnights[, 'QLDMetro'], end = c(2015, 4))
+
+test1 <- window(visnights[, 'QLDMetro'], start = c(2014, 1))
+test2 <- window(visnights[, 'QLDMetro'], start = c(2015, 1))
+test3 <- window(visnights[, 'QLDMetro'], start = c(2016, 1))
+
+ts1 <- snaive(train1)
+ts2 <- snaive(train2)
+ts3 <- snaive(train3)
+
+accuracy(ts1, test1)
+accuracy(ts2, test2)
+accuracy(ts3, test3)
+```
+
+```{r}
+autoplot(dowjones)
+dowjonesmodel <- rwf(dowjones, drift = T)
+autoplot(dowjones) +
+  autolayer(dowjonesmodel)
+
+checkresiduals(dowjonesmodel)
+
+autoplot(dowjones) +
+autolayer(naive(dowjones))
+```
+
+  * Consider the daily closing IBM stock prices (data set ibmclose).
+  Produce some plots of the data in order to become familiar with it.
+
+```{r}
+autoplot(ibmclose)
+```
+  
+  Split the data into a training set of 300 observations and a test set of 69 observations.
+
+```{r}
+ibmtrain <- subset(ibmclose, end = 300)
+ibmtest <- subset(ibmclose, start = 301)
+```
+
+  Try using various benchmark methods to forecast the training set and compare the results on the test set. Which method did best?
+  
+```{r}
+ibmsnaive <- snaive(ibmtrain, h = 69)
+ibmnaive <- naive(ibmtrain, h = 69)
+ibmdrift <- rwf(ibmtrain, drift = TRUE, h = 69)
+ibmmean <- meanf(ibmtrain, h = 69)  
+```  
+
+Check the residuals of your preferred method. Do they resemble white noise?
+
+```{r}
+accuracy(ibmsnaive, ibmtest)
+accuracy(ibmnaive, ibmtest)
+accuracy(ibmdrift, ibmtest)
+accuracy(ibmmean, ibmtest)
+checkresiduals(rwf(ibmclose, drift = T))
+```
+
+  ==> The best method is rwf() with drift. The Ljung-Box test shows that the residuals are white noise.
+  
+  * Consider the sales of new one-family houses in the USA, Jan 1973 ??? Nov 1995 (data set hsales).
+
+  * Produce some plots of the data in order to become familiar with it.
+
+```{r}
+autoplot(hsales)
+```
+
+  * Split the hsales data set into a training set and a test set, where the test set is the last two years of data.
+
+```{r}
+hsales_train <- window(hsales, end = c(1993, 12))
+hsales_test <- window(hsales, start = c(1994, 01))
+
+autoplot(hsales_train) +
+  autolayer(hsales_test)
+```
+
+  * Try using various benchmark methods to forecast the training set and compare the results on the test set. Which method did best?
+  
+```{r}
+hsalessnaive <- snaive(hsales_train, h = 24)
+hsalesnaive <- naive(hsales_train, h = 24)
+hsalesdrift <- rwf(hsales_train, drift = TRUE, h = 24)
+hsalesmean <- meanf(hsales_train, h = 24)  
+
+accuracy(hsalessnaive, hsales_test)
+accuracy(hsalesnaive, hsales_test)
+accuracy(hsalesdrift, hsales_test)
+accuracy(hsalesmean, hsales_test)
+```
+
+  *  The seasonal naive method gives better results.
+
+  * Check the residuals of your preferred method. Do they resemble white noise?
+
+```{r}
+checkresiduals(hsalessnaive)
+```
+
+  ==> The residuals don't look white noise.

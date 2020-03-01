@@ -1,0 +1,323 @@
+---
+title: "Time series regression models"
+output: html_document
+---
+
+The idea of time series regression is that we forecast the time series y assuming a linear relationship with other time series x.
+```{r warning=FALSE, message=FALSE}
+autoplot(uschange[, c('Consumption', 'Income')]) +
+  xlab('Year') +
+  ylab('Percentage change') +
+  ggtitle('Percentage changes in personal consumption expenditure and personal income for the USA')
+```
+
+## Lineqr regression
+```{r}
+summary(tslm(Consumption ~ Income, data = uschange))
+```
+
+- The intercept indicates that even when there is no change in personal income since the last quarter, the personal consumption expenditure will increase on average by .55%.
+
+- The slope indicates that a one unit increase in personal income results in .28 units increase in personal consumption.
+
+- Building a multiple linear regression model can potentially generate more accurate forecasts as we expect consumption expenditure to not only depend on personal income but on other predictors as well.
+
+```{r}
+usconsfitted <- tslm(Consumption ~ Income + Production + Unemployment + Savings, data = uschange)
+summary(usconsfitted)
+```
+
+  - Notice that Income and Production are positively related to Consumption, but only the result of Income is statistically significant.
+
+  - Unemployment and Savings are negatively related to Consumption, but only Savings is statistically significant.
+
+We will try to keep only Income and Savings and compare the adjR^2 of both models.
+
+```{r}
+usconsfitted1 <- update(usconsfitted, .~. - Unemployment - Production, data = uschange)
+summary(usconsfitted1)
+
+autoplot(uschange[, 'Consumption'], series = 'True values') + 
+  #+ autolayer(fitted(usconsfitted), series = 'Fitted')
+  autolayer(fitted(usconsfitted1), series = 'fitted 1')
+```
+
+The model explains 0.7486 <==> ~75% of the variation in the consumption data compared to the simple linear regression which explains only ~16% of the variation.
+
+The model that contains just Income and Savings as predictors explains 0.7164 <==> ~71.6% of the variation.
+
+  . Another mesure of how well model has fitted the data is RSE which stands for `Residual Standard Error`.
+  - RSE for simple lm with just Income as a predictor = 0.6026.
+  - RSE for a full model = 0.3286.
+  - RSE for Income and Savings = .349.
+ 
+## Evaluating the regression model 
+```{r}
+checkresiduals(usconsfitted)
+```
+
+  - The time plot shows some changing variation over time, but is otherwise not remarkable. This heteroscedaticity may affect the prediction inteval covarage.
+
+  - The histogram shows that residuals are slightly skewed, which may also affect the prediction interval covarage.
+
+  - the ACF plot shows one spike at lag 7, otherwise no other significant spikes at 5% level, Which leads to `no autocorrelation` of the residuals. This is confirmed by Breusch-Godfrey test where p-value > .05 indicating that the residuals come from a white noise series. 
+
+##  Residual plots against predictors
+A scatterplot of residuals against each predictor is displayed to check fo any pattern. If any, the predictor(s) should be added as non linearly related to the forecast variable in the model.
+
+```{r}
+usdf <- as.data.frame(uschange)
+usdf[, 'Residuals'] <- as.numeric(residuals(usconsfitted))
+
+p1 <- ggplot(usdf, aes(x = Income, y = Residuals)) + geom_point()
+p2 <- ggplot(usdf, aes(x = Production, y = Residuals)) + geom_point()
+p3 <- ggplot(usdf, aes(x = Savings, y = Residuals)) + geom_point()
+p4 <- ggplot(usdf, aes(x = Unemployment, y = Residuals)) + geom_point()
+gridExtra::grid.arrange(p1, p2, p3, p4, nrow=2)
+```
+
+##  Residual plots against fitted values
+If any pattern is observed, there may be ???heteroscedasticity??? in the errors meaning that the variance of the residuals may not be constant. To handle this issue, a transformation of the forecast variable such as a logarithm or square root may be required. 
+```{r warning=FALSE}
+library(dplyr)
+cbind(fitted = fitted(usconsfitted), residuals = residuals(usconsfitted)) %>%
+  as.data.frame() %>%
+  ggplot(aes(x = fitted, y = residuals)) + geom_point()
+```
+
+##  Some useful predictors
+
+```{r}
+beer <- window(ausbeer, start = 1991)
+autoplot(beer) +
+  xlab('Year') +
+  ylab('Megalitres')
+
+beerfit <- tslm(beer ~ trend + season)
+summary(beerfit)
+
+autoplot(forecast(beer)) +
+  xlab('Year') +
+  ylab('Megalitres') +
+  ggtitle('Forecasts of beer production using linear regression')
+```
+
+    Daily electricity demand
+
+```{r}
+daily20 <- head(elecdaily, 20)
+head(daily20)
+
+autoplot(daily20)
+elecdemand <- tslm(Demand ~ Temperature, data = daily20)
+summary(elecdemand)
+
+checkresiduals(elecdemand)
+
+as.data.frame(daily20[, c('Demand', 'Temperature')]) %>%
+  ggplot(aes(x = Temperature, y = Demand)) +
+  geom_point() +
+  geom_smooth(method = 'lm', se = F)
+```
+
+  - There is a positive relationship between demand and temperature because the slope equals 6.75. This is due to using air conditionner when temperature goes higher.
+  
+  - According to the scatterplot, there is no outliers in the data.
+  
+  - The time plot shows some variations across time and a zero mean of the residuals.
+  - The ACF plot shows no autocorrelation of the residuals.
+  - The Breusch-Godfrey test indicates that residuals behave like white noise series.
+  
+  ==> This model may be good for this data.
+  
+   Forecasts and prediction intervals
+```{r}
+forecast(elecdemand, newdata = data.frame(Temperature = c(15, 35)))
+```
+
+  - Plot all available data
+```{r}
+as.data.frame(elecdaily[, c('Demand', 'Temperature', 'WorkDay')]) %>%
+  ggplot(aes(x = Temperature, y = Demand, col = as.factor(WorkDay))) +
+  geom_point() +
+  geom_smooth() +
+  xlab('Temperature') +
+  ylab('Demand') +
+  ggtitle('Electricity demand 2014') +
+  scale_color_manual(labels = c('Weekend', 'Workday'), values = c('green', 'red'))
+```
+
+  - The plot shows that the relationship between demand and temperature is not linear, so the model built above won't work for this data as it won't capture all the info availbale.
+  - Demand during workdays is more inportant than during the week-end. We should include this variable when modeling.
+
+    mens400 dataset
+
+```{r}
+autoplot(mens400) + 
+  xlab('Year') +
+  ylab('Winning time (sec)') +
+  ggtitle("Winning time in Olympic Men's 400m (1896-2016)")
+
+mensfit <- tslm(na.interp(mens400) ~ trend)
+
+autoplot(mens400, series = 'Data') + 
+  autolayer(fitted(mensfit), series = 'Fitted') +
+  xlab('Year') +
+  ylab('Winning time (sec)') +
+  ggtitle("Winning time in Olympic Men's 400m (1896-2016)")
+
+checkresiduals(mensfit)
+
+summary(mensfit)
+```
+
+  -  The plot shows some missing data, a decreading trend and no seasonal pattern.
+  - The residuals reveal:
+    . Some variations in the plot around 0,
+    . The ACF plot shows no autocorrelation between residuals and this is confirmed by Breusch-Godfrey test at p-value of .6
+  - The summary statistics shows an R^2 of 82.5% of variability that are captured by the model which is good.
+  
+==> So we can assume that a linear model is good for this data.
+
+  - Predict the winning time for 2020 Olympics
+```{r warning=FALSE}
+forecast(mensfit, newdata = 2020)
+```
+
+Given the below assumptions:
+  . Linear relationship between winning time and year
+  . residuals have mean 0 and no autocorrelation
+  
+Prediction inteval is shown above for year 2020.
+
+    fancy dataset
+```{r}
+autoplot(fancy)
+
+fancyfit <- tslm(log(fancy) ~ trend + season)
+checkresiduals(fancyfit)
+```
+
+  - The ts shows an increasing trend and a seasonal pattern.
+  - We can see a sharp peak in sales around Christmas.
+  - We can see also a small peak in sales in March.
+  - The seasonal fluctuation increases over time.
+  - The sales show a drop at the start of each year.
+  
+  - As the seasonal fluctuations increase over time, a log transfomation is necessary to keep the seasonal fluctuations constant.
+  
+```{r}
+autoplot(BoxCox(fancy, 0))
+```
+
+  - The variation increases as the level of the ts inreases. This makes the forecating process difficult. One way to stabilise the variation is to transform the ts as above, as a result, the seasonal variation is about the same over time.
+
+```{r}
+fancyfit <- tslm(BoxCox(fancy, 0) ~ trend + season)
+
+autoplot(BoxCox(fancy, 0), series = 'Data') +
+  autolayer(fitted(fancyfit), series = 'Fitted') +
+  xlab('Month') +
+  ylab('Log(Sales)') +
+  ggtitle('Monthly sales (1987-1993)')
+```
+
+  - Plot the residuals against time and against the fitted values
+```{r}
+autoplot(residuals(fancyfit)) +
+  ylab('Residuals') +
+  xlab('Year')
+
+cbind(Fitted = fitted(fancyfit), Residuals = residuals(fancyfit)) %>%
+  as.data.frame() %>%
+  ggplot(aes(x = Fitted, y = Residuals)) + 
+  geom_point()
+```
+
+- The time plot shows some changing variation over time, but is otherwise relatively unremarkable. 
+- The plot of residuals against fitted values shows no pattern as the residuals are scattered randomly.
+
+```{r}
+summary(fancyfit)
+```
+ 
+ -  The summary shows positive coefficients for each month, indicating that the sales incresases over time and December shows the largest increase in sales.
+ 
+```{r}
+checkresiduals(fancyfit)
+```
+ -  The Breusch-Godfrey test indicates that there is some autocorrelation in the residuals, meaning there still some information to be exploited to obtain better forecats.
+ 
+  . Predict the monthly sales for 1994, 1995, and 1996.
+```{r}
+fancypred <- forecast(fancyfit, h = 12 * 3)
+autoplot(fancypred) +
+  xlab('Year') +
+  ylab('Log (sales)') +
+  ggtitle('Predicted monthly sales for 1/1994 - 12/1996')
+```
+ 
+```{r}
+exp(data.frame(fancypred))
+```
+ 
+    gasoline dataset
+
+```{r}
+autoplot(gasoline)
+
+gasoline1 <- window(gasoline, end = 2004)
+
+bestfit <- list(aicc=Inf)
+bestK <- 0
+for(K in seq(25)) {
+  gasfit <- auto.arima(gasoline1, xreg=fourier(gasoline1, K=K),
+    seasonal=FALSE)
+  if(gasfit[["aicc"]] < bestfit[["aicc"]]) {
+    bestfit <- gasfit
+    bestK <- K
+  }
+}
+
+gasforecasts <- forecast(bestfit, xreg = fourier(gasoline1, K = bestK, h = 52))
+
+plot(gasforecasts)
+```
+
+    huron dataset
+
+```{r}
+autoplot(huron) + 
+  xlab('Year') +
+  ylab('Water level (feet)') +
+  ggtitle('water level of Lake Huron in feet from 1875 to 1972')
+
+huronfit <- tslm(huron ~ trend)
+summary(huronfit)
+
+autoplot(huron, series = 'Data') + 
+  autolayer(fitted(huronfit), series = 'Fitted') +
+  xlab('Year') +
+  ylab('Water level (feet)') +
+  ggtitle('water level of Lake Huron in feet from 1875 to 1972')
+```
+
+  - The plot shows a decreasing trend and no seasonal pattern.
+  - The level of Huron lake drecreases by .024 feet every year and the result is statistically significant.
+  
+  - By plotting the fitted values against the true values, we can definitely assume that the linear model is not suitable to fit the data, this is confirmed by R^2 = 0.2725 from the previous LM model which is very low.
+  
+```{r}
+checkresiduals(huronfit)
+```
+  
+  - The ACF plot shows autocorrelations in the residuals, which is confirmed by Breusch-Godfrey test with p-value < .05. This means that there is some information left by the model. So the model should be improved.
+
+  Forecasts from these two models for the period up to 1980  
+```{r}
+autoplot(forecast(huronfit, newdata = seq(1973, 1980)))
+```
+  
+  - The model fails to give good predictions as the prediction intervals are very large.
+  
+  
